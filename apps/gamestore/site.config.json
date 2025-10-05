@@ -1,0 +1,7 @@
+{
+  "name": "gamestore",
+  "theme": "default",
+  "locale": "en",
+  "featureFlags": {},
+  "port": 3002
+}

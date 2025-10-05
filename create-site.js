@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
+import net from "net";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,37 +45,65 @@ function copyFolderSync(from, to) {
   });
 }
 
-// Копируем шаблон
-copyFolderSync(templatePath, newSitePath);
+// Функция проверки, занят ли порт
+function isPortTaken(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(true));
+    server.once("listening", () => {
+      server.close();
+      resolve(false);
+    });
+    server.listen(port);
+  });
+}
 
-// Создаем базовый site.config.json
-const configPath = path.join(newSitePath, "site.config.json");
-if (!fs.existsSync(configPath)) {
+// Функция поиска свободного порта
+async function getAvailablePort(startPort = 3000) {
+  let port = startPort;
+  while (await isPortTaken(port)) {
+    port++;
+  }
+  return port;
+}
+
+// Основная логика
+(async () => {
+  // Копируем шаблон
+  copyFolderSync(templatePath, newSitePath);
+
+  // Генерируем уникальный порт
+  const port = await getAvailablePort(3000);
+
+  // Создаем базовый site.config.json
+  const configPath = path.join(newSitePath, "site.config.json");
   const defaultConfig = {
     name: siteName,
     theme: "default",
     locale: "en",
     featureFlags: {},
+    port, // уникальный порт
   };
   fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), "utf-8");
-}
 
-// Обновляем имя workspace в package.json
-const packageJsonPath = path.join(newSitePath, "package.json");
-if (fs.existsSync(packageJsonPath)) {
-  const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
-  pkg.name = siteName; // уникальное имя workspace
-  fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2), "utf-8");
-}
+  // Обновляем имя workspace в package.json
+  const packageJsonPath = path.join(newSitePath, "package.json");
+  if (fs.existsSync(packageJsonPath)) {
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+    pkg.name = siteName; // уникальное имя workspace
+    fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2), "utf-8");
+  }
 
-console.log(`Сайт "${siteName}" успешно создан в apps/${siteName}`);
+  console.log(`Сайт "${siteName}" успешно создан в apps/${siteName}`);
+  console.log(`Сайт будет запускаться на порту: ${port}`);
 
-// Установка зависимостей (опционально)
-try {
-  execSync(`cd ${newSitePath} && yarn install`, { stdio: "inherit" });
-  console.log("Зависимости установлены.");
-} catch (err) {
-  console.warn(
-    'Не удалось автоматически установить зависимости. Установите их вручную через "yarn install".'
-  );
-}
+  // Установка зависимостей (опционально)
+  try {
+    execSync(`cd ${newSitePath} && yarn install`, { stdio: "inherit" });
+    console.log("Зависимости установлены.");
+  } catch (err) {
+    console.warn(
+      'Не удалось автоматически установить зависимости. Установите их вручную через "yarn install".'
+    );
+  }
+})();
